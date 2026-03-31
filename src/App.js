@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./firebase";
-import { ref as dbRef, push, onValue, remove, set, update, onDisconnect, off } from "firebase/database";
+import { ref as dbRef, push, onValue, remove, set, update, onDisconnect } from "firebase/database";
 import CryptoJS from "crypto-js";
 
 /* ================= PRODUCTION-GRADE E2EE ================= */
