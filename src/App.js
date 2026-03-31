@@ -66,7 +66,7 @@ function Home() {
 
   return (
     <div style={styles.homeContainer}>
-      <style>{keyframeAnimations}</style>
+      <style>{globalStyles}</style>
       <div style={styles.glow} />
       <div style={styles.premiumCard}>
         <div style={styles.brandBadge}>SECURE END-TO-END</div>
@@ -354,6 +354,7 @@ function Chat() {
   if (!vaultPassword) {
       return (
         <div style={styles.homeContainer}>
+            <style>{globalStyles}</style>
             <div style={styles.premiumCard}>
                 <h2 style={{color: '#fff'}}>Vault Locked</h2>
                 <input 
@@ -374,7 +375,7 @@ function Chat() {
 
   return (
     <div style={styles.chatWrapper}>
-      <style>{keyframeAnimations}</style>
+      <style>{globalStyles}</style>
       
       <header style={styles.premiumHeader}>
         <div style={styles.headerInfo}>
@@ -476,12 +477,16 @@ export default function App() {
 
 /* ================= STYLES ================= */
 
-const keyframeAnimations = `
+// Fix applied here: Added global CSS reset (* { box-sizing: border-box; ... }) to prevent padding from expanding containers past 100vw on mobile.
+const globalStyles = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; background-color: #050505; }
   @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
 `;
 
 const styles = {
-  homeContainer: { height: "100dvh", background: "#050505", display: "flex", justifyContent: "center", alignItems: "center", position: "relative", overflow: "hidden", fontFamily: "'Inter', sans-serif" },
+  // Added width 100% to lock containers to viewport size securely
+  homeContainer: { height: "100dvh", width: "100%", background: "#050505", display: "flex", justifyContent: "center", alignItems: "center", position: "relative", overflow: "hidden", fontFamily: "'Inter', sans-serif" },
   glow: { position: "absolute", width: "400px", height: "400px", background: "#004d40", filter: "blur(150px)", borderRadius: "50%", top: "10%", left: "20%", opacity: 0.3 },
   premiumCard: { background: "rgba(15, 15, 15, 0.9)", backdropFilter: "blur(25px)", padding: "50px 40px", borderRadius: "40px", border: "1px solid rgba(255,255,255,0.05)", width: "90%", maxWidth: "440px", textAlign: "center", zIndex: 2 },
   brandBadge: { display: "inline-block", padding: "6px 14px", background: "rgba(0, 255, 163, 0.08)", color: "#00ffa3", borderRadius: "20px", fontSize: "11px", fontWeight: "bold", letterSpacing: "1.5px", marginBottom: "25px" },
@@ -490,15 +495,19 @@ const styles = {
   inputGroup: { display: "flex", flexDirection: "column", gap: "15px" },
   premiumInput: { background: "#000", border: "1px solid #222", padding: "18px", borderRadius: "16px", color: "#fff", fontSize: "16px", outline: "none" },
   premiumButton: { background: "#fff", color: "#000", padding: "18px", borderRadius: "16px", border: "none", fontWeight: "800", cursor: "pointer", fontSize: "16px" },
-  chatWrapper: { height: "100dvh", display: "flex", flexDirection: "column", background: "#080808", color: "#fff", fontFamily: "'Inter', sans-serif" },
-  premiumHeader: { padding: "18px 25px", background: "rgba(8,8,8,0.9)", backdropFilter: "blur(15px)", borderBottom: "1px solid #181818", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
+  
+  // Adjusted chat wrapper to handle strict widths and hide horizontal overflowing
+  chatWrapper: { height: "100dvh", width: "100%", overflowX: "hidden", display: "flex", flexDirection: "column", background: "#080808", color: "#fff", fontFamily: "'Inter', sans-serif" },
+  premiumHeader: { width: "100%", padding: "18px 25px", background: "rgba(8,8,8,0.9)", backdropFilter: "blur(15px)", borderBottom: "1px solid #181818", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
   headerInfo: { display: "flex", alignItems: "center", gap: "15px" },
   avatar: { width: "42px", height: "42px", background: "#004d40", borderRadius: "14px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", color: "#00ffa3", fontSize: "18px" },
   headerName: { fontSize: "17px", fontWeight: "700" },
   statusTag: { fontSize: "11px", fontWeight: "500", marginTop: "2px" },
   headerActions: { display: "flex", gap: "12px" },
   circleBtn: { background: "#151515", border: "none", color: "#eee", width: "40px", height: "40px", borderRadius: "12px", cursor: "pointer", fontSize: "18px" },
-  messageArea: { flex: 1, overflowY: "auto", padding: "25px", display: "flex", flexDirection: "column", gap: "20px" },
+  
+  // Ensure messageArea acts tightly inside its wrapper
+  messageArea: { width: "100%", overflowX: "hidden", flex: 1, overflowY: "auto", padding: "25px", display: "flex", flexDirection: "column", gap: "20px" },
   encryptionNotice: { textAlign: "center", fontSize: "11px", color: "#444", margin: "10px 0", letterSpacing: "0.5px" },
   messageRow: { display: "flex", width: "100%" },
   premiumBubble: { maxWidth: "82%", padding: "14px 18px", position: "relative", boxShadow: "0 4px 15px rgba(0,0,0,0.2)" },
@@ -511,7 +520,9 @@ const styles = {
   mediaThumbnail: { background: "rgba(255,255,255,0.03)", padding: "15px", borderRadius: "14px", display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", border: "1px solid #222" },
   mediaIcon: { fontSize: "22px" },
   destructedMsg: { padding: "12px", color: "#444", fontStyle: "italic", fontSize: "13px" },
-  inputBar: { padding: "20px 25px 30px 25px", background: "#080808" },
+  
+  // Re-secured inputBar strictly to full width
+  inputBar: { width: "100%", padding: "20px 25px 30px 25px", background: "#080808" },
   inputContainer: { background: "#121212", borderRadius: "20px", padding: "10px 15px", display: "flex", alignItems: "center", gap: "15px", border: "1px solid #222" },
   toolBtn: { background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer" },
   mainInput: { flex: 1, background: "none", border: "none", color: "#fff", padding: "12px", fontSize: "16px", outline: "none" },
