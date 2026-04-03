@@ -455,7 +455,12 @@ function Chat() {
             }}
             onKeyDown={(e) => e.key === 'Enter' && sendTextMessage()}
           />
-          <button style={{...styles.sendAction, opacity: message.trim() ? 1 : 0.4}} onClick={sendTextMessage}>SEND</button>
+          <button style={{...styles.sendAction, opacity: message.trim() ? 1 : 0.4}} onClick={sendTextMessage}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
+          </button>
         </div>
       </footer>
     </div>
@@ -477,7 +482,6 @@ export default function App() {
 
 /* ================= STYLES ================= */
 
-// Fix applied here: Added global CSS reset (* { box-sizing: border-box; ... }) to prevent padding from expanding containers past 100vw on mobile.
 const globalStyles = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100%; max-width: 100vw; overflow-x: hidden; background-color: #050505; }
@@ -485,7 +489,6 @@ const globalStyles = `
 `;
 
 const styles = {
-  // Added width 100% to lock containers to viewport size securely
   homeContainer: { height: "100dvh", width: "100%", background: "#050505", display: "flex", justifyContent: "center", alignItems: "center", position: "relative", overflow: "hidden", fontFamily: "'Inter', sans-serif" },
   glow: { position: "absolute", width: "400px", height: "400px", background: "#004d40", filter: "blur(150px)", borderRadius: "50%", top: "10%", left: "20%", opacity: 0.3 },
   premiumCard: { background: "rgba(15, 15, 15, 0.9)", backdropFilter: "blur(25px)", padding: "50px 40px", borderRadius: "40px", border: "1px solid rgba(255,255,255,0.05)", width: "90%", maxWidth: "440px", textAlign: "center", zIndex: 2 },
@@ -496,7 +499,6 @@ const styles = {
   premiumInput: { background: "#000", border: "1px solid #222", padding: "18px", borderRadius: "16px", color: "#fff", fontSize: "16px", outline: "none" },
   premiumButton: { background: "#fff", color: "#000", padding: "18px", borderRadius: "16px", border: "none", fontWeight: "800", cursor: "pointer", fontSize: "16px" },
   
-  // Adjusted chat wrapper to handle strict widths and hide horizontal overflowing
   chatWrapper: { height: "100dvh", width: "100%", overflowX: "hidden", display: "flex", flexDirection: "column", background: "#080808", color: "#fff", fontFamily: "'Inter', sans-serif" },
   premiumHeader: { width: "100%", padding: "18px 25px", background: "rgba(8,8,8,0.9)", backdropFilter: "blur(15px)", borderBottom: "1px solid #181818", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
   headerInfo: { display: "flex", alignItems: "center", gap: "15px" },
@@ -506,7 +508,6 @@ const styles = {
   headerActions: { display: "flex", gap: "12px" },
   circleBtn: { background: "#151515", border: "none", color: "#eee", width: "40px", height: "40px", borderRadius: "12px", cursor: "pointer", fontSize: "18px" },
   
-  // Ensure messageArea acts tightly inside its wrapper
   messageArea: { width: "100%", overflowX: "hidden", flex: 1, overflowY: "auto", padding: "25px", display: "flex", flexDirection: "column", gap: "20px" },
   encryptionNotice: { textAlign: "center", fontSize: "11px", color: "#444", margin: "10px 0", letterSpacing: "0.5px" },
   messageRow: { display: "flex", width: "100%" },
@@ -521,12 +522,26 @@ const styles = {
   mediaIcon: { fontSize: "22px" },
   destructedMsg: { padding: "12px", color: "#444", fontStyle: "italic", fontSize: "13px" },
   
-  // Re-secured inputBar strictly to full width
   inputBar: { width: "100%", padding: "20px 25px 30px 25px", background: "#080808" },
-  inputContainer: { background: "#121212", borderRadius: "20px", padding: "10px 15px", display: "flex", alignItems: "center", gap: "15px", border: "1px solid #222" },
+  inputContainer: { background: "#121212", borderRadius: "20px", padding: "10px 15px", display: "flex", alignItems: "center", gap: "10px", border: "1px solid #222" },
   toolBtn: { background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer" },
-  mainInput: { flex: 1, background: "none", border: "none", color: "#fff", padding: "12px", fontSize: "16px", outline: "none" },
-  sendAction: { background: "#00ffa3", color: "#000", border: "none", padding: "12px 24px", borderRadius: "14px", fontWeight: "900", fontSize: "13px", cursor: "pointer" },
+  mainInput: { flex: 1, background: "none", border: "none", color: "#fff", padding: "12px 0", fontSize: "16px", outline: "none", minWidth: 0 },
+  
+  // Adjusted Send Button to fix spilling and house the SVG cleanly
+  sendAction: { 
+    background: "#00ffa3", 
+    color: "#000", 
+    border: "none", 
+    width: "42px", 
+    height: "42px", 
+    borderRadius: "14px", 
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    cursor: "pointer", 
+    flexShrink: 0 // Crucial to stop it from squishing or pushing out of bounds
+  },
+  
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.98)", zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "center" },
   modalContent: { width: "100%", height: "100%", display: "flex", flexDirection: "column" },
   modalHeader: { padding: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1a1a1a" },
