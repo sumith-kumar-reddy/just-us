@@ -7,7 +7,7 @@ import CryptoJS from "crypto-js";
 
 /* ================= PRODUCTION-GRADE E2EE ================= */
 
-// Strong key derivation using PBKDF2 (prevents brute-force dictionary attacks)
+// Strong key derivation using PBKDF2
 const deriveKey = (roomId, password) => {
   return CryptoJS.PBKDF2(password, roomId + "secure-premium-salt-2026", {
     keySize: 256 / 32,
@@ -15,21 +15,34 @@ const deriveKey = (roomId, password) => {
   }).toString();
 };
 
-// Encrypt with a randomized Initialization Vector (IV) for semantic security
+// Encrypt with randomized IV and HMAC-SHA256 for integrity
 const encrypt = (text, key) => {
   const iv = CryptoJS.lib.WordArray.random(16);
-  const encrypted = CryptoJS.AES.encrypt(text, CryptoJS.enc.Hex.parse(key), { iv });
-  return iv.toString() + ":" + encrypted.toString();
+  const encrypted = CryptoJS.AES.encrypt(text, CryptoJS.enc.Hex.parse(key), { iv }).toString();
+  
+  const payload = iv.toString() + ":" + encrypted;
+  const mac = CryptoJS.HmacSHA256(payload, key).toString();
+  
+  return payload + ":" + mac;
 };
 
-// Safely decrypt utilizing the extracted IV
+// Safely decrypt utilizing IV and verifying HMAC
 const decrypt = (data, key) => {
   try {
-    if (!data || !data.includes(":")) return "DECRYPTION_FAILED";
-    const [ivHex, cipher] = data.split(":");
+    if (!data) return "DECRYPTION_FAILED";
+    const parts = data.split(":");
+    if (parts.length !== 3) return "DECRYPTION_FAILED";
+
+    const [ivHex, cipher, mac] = parts;
+    const payload = ivHex + ":" + cipher;
+
+    const expectedMac = CryptoJS.HmacSHA256(payload, key).toString();
+    if (mac !== expectedMac) return "TAMPERED_MESSAGE";
+
     const bytes = CryptoJS.AES.decrypt(cipher, CryptoJS.enc.Hex.parse(key), {
       iv: CryptoJS.enc.Hex.parse(ivHex),
     });
+    
     const result = bytes.toString(CryptoJS.enc.Utf8);
     return result || "DECRYPTION_FAILED";
   } catch {
@@ -59,9 +72,11 @@ function Home() {
     if (!myName.trim() || !friendName.trim() || !roomPassword.trim()) return;
     const roomId = uuidv4();
     const adminId = "u_" + Math.random().toString(36).substr(2, 5);
-    // Passing password in URL hash keeps it client-side only (never hits the server)
-    const secretHash = `vault=${encodeURIComponent(roomPassword)}`;
-    navigate(`/chat/${roomId}?admin=${encodeURIComponent(myName)}&guest=${encodeURIComponent(friendName)}&role=admin&uid=${adminId}#${secretHash}`);
+    
+    // Security Fix: Store in session storage, not URL
+    sessionStorage.setItem(`vault_${roomId}`, roomPassword);
+    
+    navigate(`/chat/${roomId}?admin=${encodeURIComponent(myName)}&guest=${encodeURIComponent(friendName)}&role=admin&uid=${adminId}`);
   };
 
   return (
@@ -106,7 +121,7 @@ function MediaBubble({ msg, roomId, encryptionKey }) {
 
   const handleOpenMedia = () => {
     const originalBase64 = decrypt(msg.content, encryptionKey);
-    if (originalBase64 !== "DECRYPTION_FAILED") {
+    if (originalBase64 !== "DECRYPTION_FAILED" && originalBase64 !== "TAMPERED_MESSAGE") {
       setDecryptedUrl(originalBase64);
       setShowPopup(true);
       if (isViewOnce) {
@@ -168,12 +183,11 @@ function Chat() {
   const navigate = useNavigate();
   const query = new URLSearchParams(location.search);
   
+  // Security Fix: Read from session storage
   const [vaultPassword, setVaultPassword] = useState(() => {
-    const params = new URLSearchParams(location.hash.replace("#", ""));
-    return params.get("vault") || "";
+    return sessionStorage.getItem(`vault_${roomId}`) || "";
   });
 
-  // Memoize the computationally expensive derived key
   const encryptionKey = useMemo(() => deriveKey(roomId, vaultPassword), [roomId, vaultPassword]);
 
   const adminName = query.get("admin") || "Admin";
@@ -202,6 +216,14 @@ function Chat() {
   
   const chatEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const lastSent = useRef(0); // Rate Limiting Ref
+
+  // Typing Cleanup on Unmount
+  useEffect(() => {
+    return () => {
+      set(dbRef(db, `rooms/${roomId}/typing/${userId}`), false);
+    };
+  }, [roomId, userId]);
 
   /* ===== Presence Management ===== */
   useEffect(() => {
@@ -212,7 +234,6 @@ function Chat() {
       const users = snap.val() || {};
       const activeIds = Object.keys(users).filter(id => users[id] === "online");
       
-      // Enforce 2-person limit
       if (activeIds.length >= 2 && !activeIds.includes(userId)) {
         setIsFull(true);
       } else {
@@ -246,11 +267,9 @@ function Chat() {
       const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
       
       list.forEach(m => {
-        // Auto-purge mechanism
         if (m.time < twentyFourHoursAgo) {
           remove(dbRef(db, `rooms/${roomId}/messages/${m.key}`));
         }
-        // Mark as seen if receiver is viewing the active tab
         if (m.sender !== userId && m.status !== "seen" && document.visibilityState === "visible") {
           update(dbRef(db, `rooms/${roomId}/messages/${m.key}`), { status: "seen" });
         }
@@ -258,7 +277,6 @@ function Chat() {
       setMessages(list.filter(m => m.time >= twentyFourHoursAgo));
     });
 
-    // Handle tab switching visibility changes for read receipts
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         onValue(msgRef, (snap) => {
@@ -287,6 +305,11 @@ function Chat() {
   /* ===== Actions ===== */
   const sendTextMessage = () => {
     if (!message.trim()) return;
+    
+    // Rate Limiting Check
+    if (Date.now() - lastSent.current < 300) return;
+    lastSent.current = Date.now();
+
     push(dbRef(db, `rooms/${roomId}/messages`), {
       type: "text",
       content: encrypt(message, encryptionKey),
@@ -328,9 +351,10 @@ function Chat() {
   };
 
   const copyInvite = () => {
-    const url = `${window.location.origin}/chat/${roomId}?admin=${adminName}&guest=${guestName}&role=guest${window.location.hash}`;
+    // Note: Link no longer contains the password hash
+    const url = `${window.location.origin}/chat/${roomId}?admin=${adminName}&guest=${guestName}&role=guest`;
     navigator.clipboard.writeText(url);
-    alert("Secure Invite Link Copied!");
+    alert("Secure Invite Link Copied! They will need the Vault Password to enter.");
   };
 
   const nukeChat = () => {
@@ -356,7 +380,7 @@ function Chat() {
         <div style={styles.homeContainer}>
             <style>{globalStyles}</style>
             <div style={styles.premiumCard}>
-                <h2 style={{color: '#fff'}}>Vault Locked</h2>
+                <h2 style={{color: '#fff', marginBottom: '20px'}}>Vault Locked</h2>
                 <input 
                     style={styles.premiumInput} 
                     type="password" 
@@ -364,7 +388,7 @@ function Chat() {
                     onKeyDown={(e) => {
                         if(e.key === 'Enter') {
                             setVaultPassword(e.target.value);
-                            window.location.hash = `vault=${encodeURIComponent(e.target.value)}`;
+                            sessionStorage.setItem(`vault_${roomId}`, e.target.value);
                         }
                     }}
                 />
@@ -394,7 +418,7 @@ function Chat() {
       </header>
 
       <main style={styles.messageArea}>
-        <div style={styles.encryptionNotice}>🔒 PBKDF2 + AES-256 E2EE Active • 24h Auto-Purge</div>
+        <div style={styles.encryptionNotice}>🔒 HMAC-SHA256 E2EE Active • 24h Auto-Purge</div>
         {messages.map((m) => {
           const isMe = m.sender === userId;
           const decryptedContent = decrypt(m.content, encryptionKey);
@@ -411,8 +435,10 @@ function Chat() {
                 {isMe && <button onClick={() => deleteMsg(m.key)} style={styles.deleteBtn}>▫️</button>}
                 
                 {m.type === 'text' ? (
-                  <div style={styles.bubbleText}>
-                      {decryptedContent === "DECRYPTION_FAILED" ? "⚠️ Error: Invalid Key" : decryptedContent}
+                  <div style={{...styles.bubbleText, color: (decryptedContent === "DECRYPTION_FAILED" || decryptedContent === "TAMPERED_MESSAGE") ? '#ff4d4d' : '#f0f0f0'}}>
+                      {decryptedContent === "DECRYPTION_FAILED" ? "⚠️ Error: Invalid Key" : 
+                       decryptedContent === "TAMPERED_MESSAGE" ? "⚠️ Message integrity compromised" : 
+                       decryptedContent}
                   </div>
                 ) : (
                   <MediaBubble msg={m} roomId={roomId} encryptionKey={encryptionKey} />
@@ -455,7 +481,11 @@ function Chat() {
             }}
             onKeyDown={(e) => e.key === 'Enter' && sendTextMessage()}
           />
-          <button style={{...styles.sendAction, opacity: message.trim() ? 1 : 0.4}} onClick={sendTextMessage}>
+          <button style={{
+            ...styles.sendAction, 
+            opacity: message.trim() ? 1 : 0.4,
+            pointerEvents: message.trim() ? "auto" : "none" // UX Fix: Disabled when empty
+          }} onClick={sendTextMessage}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="19" x2="12" y2="5"></line>
               <polyline points="5 12 12 5 19 12"></polyline>
@@ -496,7 +526,7 @@ const styles = {
   premiumTitle: { color: "#fff", fontSize: "40px", fontWeight: "900", margin: "0 0 10px 0", letterSpacing: "-1px" },
   premiumSubTitle: { color: "#666", fontSize: "15px", marginBottom: "40px" },
   inputGroup: { display: "flex", flexDirection: "column", gap: "15px" },
-  premiumInput: { background: "#000", border: "1px solid #222", padding: "18px", borderRadius: "16px", color: "#fff", fontSize: "16px", outline: "none" },
+  premiumInput: { background: "#000", border: "1px solid #222", padding: "18px", borderRadius: "16px", color: "#fff", fontSize: "16px", outline: "none", width: "100%" },
   premiumButton: { background: "#fff", color: "#000", padding: "18px", borderRadius: "16px", border: "none", fontWeight: "800", cursor: "pointer", fontSize: "16px" },
   
   chatWrapper: { height: "100dvh", width: "100%", overflowX: "hidden", display: "flex", flexDirection: "column", background: "#080808", color: "#fff", fontFamily: "'Inter', sans-serif" },
@@ -513,7 +543,7 @@ const styles = {
   messageRow: { display: "flex", width: "100%" },
   premiumBubble: { maxWidth: "82%", padding: "14px 18px", position: "relative", boxShadow: "0 4px 15px rgba(0,0,0,0.2)" },
   deleteBtn: { position: 'absolute', top: '-10px', right: '-10px', background: '#222', border: '1px solid #444', borderRadius: '50%', width: '22px', height: '22px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  bubbleText: { fontSize: "15.5px", lineHeight: "1.6", color: "#f0f0f0" },
+  bubbleText: { fontSize: "15.5px", lineHeight: "1.6" },
   bubbleMeta: { fontSize: "10px", color: "#555", marginTop: "8px", textAlign: "right", fontWeight: "500" },
   typingBubble: { background: "#151515", padding: "12px 18px", borderRadius: "18px 18px 18px 4px", fontSize: "13px", color: "#888", display: "flex", alignItems: "center", border: "1px solid #222" },
   typingContainer: { display: "flex", gap: "4px" },
@@ -526,21 +556,7 @@ const styles = {
   inputContainer: { background: "#121212", borderRadius: "20px", padding: "10px 15px", display: "flex", alignItems: "center", gap: "10px", border: "1px solid #222" },
   toolBtn: { background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer" },
   mainInput: { flex: 1, background: "none", border: "none", color: "#fff", padding: "12px 0", fontSize: "16px", outline: "none", minWidth: 0 },
-  
-  // Adjusted Send Button to fix spilling and house the SVG cleanly
-  sendAction: { 
-    background: "#00ffa3", 
-    color: "#000", 
-    border: "none", 
-    width: "42px", 
-    height: "42px", 
-    borderRadius: "14px", 
-    display: "flex", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    cursor: "pointer", 
-    flexShrink: 0 // Crucial to stop it from squishing or pushing out of bounds
-  },
+  sendAction: { background: "#00ffa3", color: "#000", border: "none", width: "42px", height: "42px", borderRadius: "14px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "opacity 0.2s" },
   
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.98)", zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "center" },
   modalContent: { width: "100%", height: "100%", display: "flex", flexDirection: "column" },
